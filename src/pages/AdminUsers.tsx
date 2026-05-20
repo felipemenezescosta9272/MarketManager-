@@ -26,6 +26,7 @@ export default function AdminUsers({ users, tenants, onAddUser, onUpdateUser, on
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [emailVal, setEmailVal] = useState('');
 
   const filteredUsers = users.filter(u => 
     u.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -36,7 +37,8 @@ export default function AdminUsers({ users, tenants, onAddUser, onUpdateUser, on
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const data: any = Object.fromEntries(formData.entries());
-    data.is_super_admin = formData.get('is_super_admin') === 'on';
+    const emailStr = String(data.email || '').trim().toLowerCase();
+    data.is_super_admin = emailStr === 'felipemenezes9272@gmail.com' ? (formData.get('is_super_admin') === 'on') : false;
     
     try {
       if (editingUser) {
@@ -61,7 +63,7 @@ export default function AdminUsers({ users, tenants, onAddUser, onUpdateUser, on
           <p className="text-slate-500 font-medium mt-1">Controle o acesso e as permissões de todos os usuários do sistema.</p>
         </div>
         <button 
-          onClick={() => { setEditingUser(null); setShowModal(true); }}
+          onClick={() => { setEditingUser(null); setEmailVal(''); setShowModal(true); }}
           className="bg-purple-600 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 shadow-xl shadow-purple-600/20 hover:shadow-2xl hover:scale-[1.02] transition-all"
         >
           <Plus size={24} /> NOVO USUÁRIO
@@ -102,7 +104,7 @@ export default function AdminUsers({ users, tenants, onAddUser, onUpdateUser, on
               </div>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button 
-                  onClick={() => { setEditingUser(user); setShowModal(true); }}
+                  onClick={() => { setEditingUser(user); setEmailVal(user.email || ''); setShowModal(true); }}
                   className="p-2 text-slate-400 hover:text-purple-600 transition-colors"
                 >
                   <Edit3 size={18} />
@@ -173,7 +175,7 @@ export default function AdminUsers({ users, tenants, onAddUser, onUpdateUser, on
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">E-mail (Login)</label>
-                    <input name="email" type="email" defaultValue={editingUser?.email} required className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none font-bold focus:ring-2 ring-purple-500/20" />
+                    <input name="email" type="email" value={emailVal} onChange={(e) => setEmailVal(e.target.value)} required className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none font-bold focus:ring-2 ring-purple-500/20" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Senha</label>
@@ -193,10 +195,17 @@ export default function AdminUsers({ users, tenants, onAddUser, onUpdateUser, on
                     </select>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl">
-                  <input type="checkbox" name="is_super_admin" id="super_admin" defaultChecked={editingUser?.is_super_admin} className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500" />
-                  <label htmlFor="super_admin" className="text-sm font-bold text-slate-700 dark:text-slate-200">Super Administrador (Acesso Total)</label>
-                </div>
+                {emailVal.trim().toLowerCase() === 'felipemenezes9272@gmail.com' ? (
+                  <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl">
+                    <input type="checkbox" name="is_super_admin" id="super_admin" defaultChecked={editingUser?.is_super_admin} className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500" />
+                    <label htmlFor="super_admin" className="text-sm font-bold text-slate-700 dark:text-slate-200">Super Administrador (Acesso Total)</label>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 p-4 bg-slate-100/50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                    <input type="checkbox" checked={false} disabled className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 opacity-50" />
+                    <span className="text-xs font-bold text-slate-400 dark:text-slate-500">Apenas felipemenezes9272@gmail.com pode ser Super Admin</span>
+                  </div>
+                )}
                 
                 <div className="flex gap-4 pt-4">
                   <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-white font-black rounded-2xl hover:bg-slate-200 transition-all">

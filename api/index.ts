@@ -4,7 +4,10 @@ import { sendConfirmationEmail, sendPasswordResetEmail, sendPasswordChangedEmail
 
 // Initialize Supabase Client
 console.log("Environment variables:", Object.keys(process.env));
-const supabaseUrl = process.env.SUPABASE_URL;
+let supabaseUrl = process.env.SUPABASE_URL;
+if (supabaseUrl) {
+  supabaseUrl = supabaseUrl.replace(/\/rest\/v1\/?$/, "");
+}
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
 console.log("Supabase URL configured:", !!supabaseUrl);
@@ -108,11 +111,12 @@ app.use("/api", async (req, res, next) => {
   }
 
   // Strict separation for Super Admin removed to allow multi-role flexibility
+  const userIsSuperAdmin = !!(user.is_super_admin && user.email === "felipemenezes9272@gmail.com");
   (req as any).tenant_id = user.tenant_id;
-  (req as any).is_super_admin = user.is_super_admin;
+  (req as any).is_super_admin = userIsSuperAdmin;
 
   // Check tenant status and license if not super admin
-  if (user.tenant_id && !user.is_super_admin) {
+  if (user.tenant_id && !userIsSuperAdmin) {
     let tenant;
     const cachedTenant = tenantCache.get(user.tenant_id);
     
@@ -185,6 +189,14 @@ const bootstrapAdmin = async () => {
     ];
 
     console.log("Starting bootstrap process...");
+
+    // Demote any other user who is erroneously marked as super admin
+    try {
+      await supabase.from("app_users").update({ is_super_admin: false }).neq("email", "felipemenezes9272@gmail.com");
+      console.log("Succeeded in demoting non-master super admins if they existed.");
+    } catch (err) {
+      console.error("Failed to demote non-master super admins:", err);
+    }
 
     // Ensure at least one tenant exists
     const { count: tenantCount } = await supabase.from("tenants").select("*", { count: 'exact', head: true });
@@ -831,13 +843,15 @@ app.get("/api/admin/users", async (req, res) => {
 app.post("/api/admin/users", async (req, res) => {
   if (!(req as any).is_super_admin) return res.status(403).json({ error: "Acesso negado" });
   const { name, email, password, role, tenant_id, is_super_admin } = req.body;
+  const emailStr = String(email || '').trim().toLowerCase();
+  const actualIsSuperAdmin = emailStr === "felipemenezes9272@gmail.com" ? Boolean(is_super_admin) : false;
   const { data, error } = await supabase.from("app_users").insert([{
     name,
     email,
     password,
     role,
     tenant_id: tenant_id ? Number(tenant_id) : null,
-    is_super_admin: Boolean(is_super_admin),
+    is_super_admin: actualIsSuperAdmin,
     email_confirmed: false // New users must confirm email
   }]).select().single();
   
@@ -860,12 +874,14 @@ app.post("/api/admin/users", async (req, res) => {
 app.put("/api/admin/users/:id", async (req, res) => {
   if (!(req as any).is_super_admin) return res.status(403).json({ error: "Acesso negado" });
   const { name, email, password, role, tenant_id, is_super_admin, email_confirmed } = req.body;
+  const emailStr = String(email || '').trim().toLowerCase();
+  const actualIsSuperAdmin = emailStr === "felipemenezes9272@gmail.com" ? Boolean(is_super_admin) : false;
   const updateData: any = { 
     name, 
     email, 
     role, 
     tenant_id: tenant_id ? Number(tenant_id) : null, 
-    is_super_admin: Boolean(is_super_admin),
+    is_super_admin: actualIsSuperAdmin,
     email_confirmed: Boolean(email_confirmed)
   };
   if (password) updateData.password = password;

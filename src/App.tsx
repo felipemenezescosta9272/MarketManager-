@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
-import { GoogleGenAI } from "@google/genai";
 import { apiFetch } from './api';
 import { 
   Product, 
@@ -339,19 +338,6 @@ export default function App() {
   const analyzeBusiness = async (type: string = 'general') => {
     setIsAnalyzing(true);
     try {
-      const apiKey = settings?.gemini_api_key || process.env.GEMINI_API_KEY;
-      
-      if (!apiKey || apiKey === 'undefined' || apiKey === '' || apiKey === 'TODO_KEYHERE') {
-        throw new Error("Chave de API não configurada. Por favor, vá em Configurações > Integração IA e insira uma chave válida do Google Gemini.");
-      }
-
-      // Basic validation: Google API keys typically start with AIza
-      if (apiKey.length < 20) {
-        throw new Error("A chave de API parece ser inválida (muito curta). Verifique as configurações de Integração IA.");
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      
       const totalSales = sales.reduce((sum, s) => sum + Number(s.total_amount), 0);
       const todayProfit = stats?.todayProfit || 0;
       const lowStockCount = products.filter(p => p.stock_quantity <= p.min_stock_level).length;
@@ -362,49 +348,25 @@ export default function App() {
         return days <= 30 && days > 0;
       }).length;
       
-      let prompt = `Você é um Analista de Negócios Sênior. Analise os dados abaixo e forneça uma resposta estruturada em Markdown, com foco em rentabilidade e eficiência operacional.
-      
-      DADOS DO SISTEMA:
-      - Faturamento Total (Período): R$ ${totalSales.toFixed(2)}
-      - Lucro de Hoje: R$ ${todayProfit.toFixed(2)}
-      - Vendas Realizadas: ${sales.length}
-      - Ticket Médio: R$ ${(sales.length > 0 ? totalSales / sales.length : 0).toFixed(2)}
-      - Margem Média Estimada: ${stats?.todayRevenue > 0 ? ((stats.todayProfit / stats.todayRevenue) * 100).toFixed(1) : '0'}%
-      - Produtos em Estoque Baixo: ${lowStockCount}
-      - Produtos Próximos ao Vencimento: ${expiryAlerts}
-      - Contas Pendentes: R$ ${pendingBills.toFixed(2)}
-      - Top 5 Produtos (Volume e Margem): ${topProducts}
-      - Tendência de Vendas (Últimos 7 dias): ${JSON.stringify(stats?.salesTrend?.slice(-7) || [])}
-      
-      SOLICITAÇÃO: `;
-      
-      switch (type) {
-        case 'ticket_average':
-          prompt += `Forneça 3 estratégias de cross-selling e up-selling específicas para aumentar o ticket médio, baseando-se nos top produtos e suas margens.`;
-          break;
-        case 'stock_optimization':
-          prompt += `Analise os riscos de estoque baixo e vencimento. Sugira ações imediatas para reduzir perdas e otimizar o capital de giro, considerando o custo dos produtos.`;
-          break;
-        case 'customer_loyalty':
-          prompt += `Com base no volume de vendas e base de ${customers.length} clientes, sugira um programa de fidelidade ou régua de comunicação para aumentar a recorrência e o LTV.`;
-          break;
-        case 'promotions':
-          prompt += `Crie 3 ideias de combos ou promoções baseadas nos produtos em destaque e na necessidade de giro de estoque, garantindo que a margem de lucro permaneça saudável.`;
-          break;
-        default:
-          prompt += `Forneça um diagnóstico geral da saúde financeira do negócio com 3 insights estratégicos acionáveis, cruzando dados de vendas, lucro e contas a pagar.`;
-      }
-
-      const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          temperature: 0.8,
-          maxOutputTokens: 2048,
-          systemInstruction: "Você é um consultor empresarial experiente. Responda **apenas** o que for solicitado, de forma profunda e baseada em dados. Cruze informações de custos, vendas e tendências para dar respostas precisas sobre lucro e rentabilidade. Use Markdown para formatação."
-        }
+      const sessionResponse = await apiFetch('/api/gemini/analyze', {
+        method: 'POST',
+        body: JSON.stringify({
+          type,
+          totalSales,
+          todayProfit,
+          salesCount: sales.length,
+          ticketAverage: sales.length > 0 ? totalSales / sales.length : 0,
+          marginEstimate: stats?.todayRevenue > 0 ? ((stats.todayProfit / stats.todayRevenue) * 100) : 0,
+          lowStockCount,
+          expiryAlerts,
+          pendingBills,
+          topProducts,
+          salesTrend: stats?.salesTrend?.slice(-7) || [],
+          customersCount: customers.length
+        })
       });
-      setAiInsights(result.text || '');
+
+      setAiInsights(sessionResponse.text || '');
     } catch (err: any) {
       console.error('AI Analysis failed:', err);
       

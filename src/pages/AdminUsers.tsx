@@ -38,7 +38,7 @@ export default function AdminUsers({ users, tenants, onAddUser, onUpdateUser, on
     const formData = new FormData(e.currentTarget);
     const data: any = Object.fromEntries(formData.entries());
     const emailStr = String(data.email || '').trim().toLowerCase();
-    data.is_super_admin = emailStr === 'felipemenezes9272@gmail.com' ? (formData.get('is_super_admin') === 'on') : false;
+    data.is_super_admin = ['felipemenezes9272@gmail.com', 'felipe_fmcosta@hotmail.com'].includes(emailStr) ? (formData.get('is_super_admin') === 'on') : false;
     
     try {
       if (editingUser) {
@@ -195,7 +195,7 @@ export default function AdminUsers({ users, tenants, onAddUser, onUpdateUser, on
                     </select>
                   </div>
                 </div>
-                {emailVal.trim().toLowerCase() === 'felipemenezes9272@gmail.com' ? (
+                {['felipemenezes9272@gmail.com', 'felipe_fmcosta@hotmail.com'].includes(emailVal.trim().toLowerCase()) ? (
                   <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl">
                     <input type="checkbox" name="is_super_admin" id="super_admin" defaultChecked={editingUser?.is_super_admin} className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500" />
                     <label htmlFor="super_admin" className="text-sm font-bold text-slate-700 dark:text-slate-200">Super Administrador (Acesso Total)</label>
@@ -203,7 +203,7 @@ export default function AdminUsers({ users, tenants, onAddUser, onUpdateUser, on
                 ) : (
                   <div className="flex items-center gap-3 p-4 bg-slate-100/50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
                     <input type="checkbox" checked={false} disabled className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 opacity-50" />
-                    <span className="text-xs font-bold text-slate-400 dark:text-slate-500">Apenas felipemenezes9272@gmail.com pode ser Super Admin</span>
+                    <span className="text-xs font-bold text-slate-400 dark:text-slate-500">Apenas administradores homologados podem ser Super Admin</span>
                   </div>
                 )}
                 

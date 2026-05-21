@@ -21,6 +21,7 @@ export default function Login({ onLogin, isLoading }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [errorDetails, setErrorDetails] = useState('');
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotStep, setForgotStep] = useState<'email' | 'reset'>('email');
   const [forgotEmail, setForgotEmail] = useState('');
@@ -33,10 +34,12 @@ export default function Login({ onLogin, isLoading }: LoginProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setErrorDetails('');
     try {
       await onLogin(email, password);
     } catch (err: any) {
       setError(err.message || 'Falha na autenticação');
+      setErrorDetails(err.details || '');
     }
   };
 
@@ -164,10 +167,17 @@ export default function Login({ onLogin, isLoading }: LoginProps) {
               <motion.div 
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="bg-rose-50 dark:bg-rose-500/10 text-rose-500 p-4 rounded-2xl text-sm font-bold border border-rose-100 dark:border-rose-500/20 flex items-center gap-3"
+                className="bg-rose-50 dark:bg-rose-500/10 text-rose-500 p-4 rounded-2xl text-sm font-bold border border-rose-100 dark:border-rose-500/20 flex flex-col gap-2"
               >
-                <ShieldCheck size={18} />
-                {error}
+                <div className="flex items-center gap-3">
+                  <ShieldCheck size={18} className="shrink-0" />
+                  <span>{error}</span>
+                </div>
+                {errorDetails && (
+                  <p className="mt-1 text-xs text-rose-400 font-medium leading-relaxed bg-white/50 dark:bg-black/20 p-3 rounded-xl border border-rose-200/20">
+                    {errorDetails}
+                  </p>
+                )}
               </motion.div>
             )}
 

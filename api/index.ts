@@ -1,5 +1,6 @@
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
+import { GoogleGenAI } from "@google/genai";
 import { sendConfirmationEmail, sendPasswordResetEmail, sendPasswordChangedEmail } from "./emailService";
 
 // Initialize Supabase Client
@@ -65,7 +66,11 @@ app.use("/api", (req, res, next) => {
 
 // Request logger
 app.use("/api", (req, res, next) => {
-  console.log(`${req.method} ${req.path}`);
+  const start = Date.now();
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    console.log(`[Express API] ${req.method} ${req.originalUrl || req.path} - Status: ${res.statusCode} (${duration}ms)`);
+  });
   next();
 });
 
@@ -100,7 +105,13 @@ app.use("/api", async (req, res, next) => {
     const { data, error: userErr } = await supabase.from('app_users').select('*').eq('id', userId).maybeSingle();
     if (userErr) {
       console.error(`Auth Middleware DB Error for userId ${userId}:`, userErr);
-      return res.status(500).json({ error: "Erro ao validar usuário", details: userErr.message });
+      let errorMsg = "Erro ao validar usuário";
+      let details = userErr.message;
+      if (userErr.message?.toLowerCase().includes("relation") && userErr.message?.toLowerCase().includes("does not exist")) {
+        errorMsg = "Banco de Dados Não Inicializado";
+        details = "A tabela 'app_users' não existe no seu banco de dados Supabase. Por favor, copie todo o conteúdo do arquivo 'supabase_schema.sql' (presente no seu projeto) e execute-o como uma nova query no painel SQL do seu console do Supabase (SQL Editor > New Query > Run) para inicializar a estrutura correta de tabelas.";
+      }
+      return res.status(500).json({ error: errorMsg, details });
     }
     if (!data) {
       console.warn(`Auth Middleware: User ${userId} not found`);
@@ -111,7 +122,7 @@ app.use("/api", async (req, res, next) => {
   }
 
   // Strict separation for Super Admin removed to allow multi-role flexibility
-  const userIsSuperAdmin = !!(user.is_super_admin && user.email === "felipemenezes9272@gmail.com");
+  const userIsSuperAdmin = !!(user.is_super_admin && ["felipemenezes9272@gmail.com", "felipe_fmcosta@hotmail.com"].includes(user.email));
   (req as any).tenant_id = user.tenant_id;
   (req as any).is_super_admin = userIsSuperAdmin;
 
@@ -185,14 +196,15 @@ const bootstrapAdmin = async () => {
   const results: any[] = [];
   try {
     const admins = [
-      { email: "felipemenezes9272@gmail.com", name: "Felipe" }
+      { email: "felipemenezes9272@gmail.com", name: "Felipe" },
+      { email: "felipe_fmcosta@hotmail.com", name: "Felipe Costa" }
     ];
 
     console.log("Starting bootstrap process...");
 
     // Demote any other user who is erroneously marked as super admin
     try {
-      await supabase.from("app_users").update({ is_super_admin: false }).neq("email", "felipemenezes9272@gmail.com");
+      await supabase.from("app_users").update({ is_super_admin: false }).not("email", "in", '("felipemenezes9272@gmail.com","felipe_fmcosta@hotmail.com")');
       console.log("Succeeded in demoting non-master super admins if they existed.");
     } catch (err) {
       console.error("Failed to demote non-master super admins:", err);
@@ -380,7 +392,7 @@ app.post("/api/login", async (req, res) => {
     console.log(`Attempting login for: ${email}`);
     
     // Auto-bootstrap if it's the super admin email and login fails
-    const superAdminEmails = ["felipemenezes9272@gmail.com"];
+    const superAdminEmails = ["felipemenezes9272@gmail.com", "felipe_fmcosta@hotmail.com"];
     
     // Debug: Check if user exists at all
     let { data: userExists, error: existError } = await supabase
@@ -426,7 +438,13 @@ app.post("/api/login", async (req, res) => {
 
     if (existError) {
       console.error("Debug User Check Error:", existError);
-      return res.status(500).json({ error: "Erro na consulta ao banco de dados", details: existError.message });
+      let errorMsg = "Erro na consulta ao banco de dados";
+      let details = existError.message;
+      if (existError.message?.toLowerCase().includes("relation") && existError.message?.toLowerCase().includes("does not exist")) {
+        errorMsg = "Banco de Dados Não Inicializado";
+        details = "A tabela 'app_users' não existe no seu banco de dados Supabase. Por favor, copie todo o conteúdo do arquivo 'supabase_schema.sql' (presente no seu projeto) e execute-o como uma nova query no painel SQL do seu console do Supabase (SQL Editor > New Query > Run) para inicializar a estrutura correta de tabelas.";
+      }
+      return res.status(500).json({ error: errorMsg, details });
     }
 
     if (!userExists) {
@@ -844,7 +862,7 @@ app.post("/api/admin/users", async (req, res) => {
   if (!(req as any).is_super_admin) return res.status(403).json({ error: "Acesso negado" });
   const { name, email, password, role, tenant_id, is_super_admin } = req.body;
   const emailStr = String(email || '').trim().toLowerCase();
-  const actualIsSuperAdmin = emailStr === "felipemenezes9272@gmail.com" ? Boolean(is_super_admin) : false;
+  const actualIsSuperAdmin = ["felipemenezes9272@gmail.com", "felipe_fmcosta@hotmail.com"].includes(emailStr) ? Boolean(is_super_admin) : false;
   const { data, error } = await supabase.from("app_users").insert([{
     name,
     email,
@@ -875,7 +893,7 @@ app.put("/api/admin/users/:id", async (req, res) => {
   if (!(req as any).is_super_admin) return res.status(403).json({ error: "Acesso negado" });
   const { name, email, password, role, tenant_id, is_super_admin, email_confirmed } = req.body;
   const emailStr = String(email || '').trim().toLowerCase();
-  const actualIsSuperAdmin = emailStr === "felipemenezes9272@gmail.com" ? Boolean(is_super_admin) : false;
+  const actualIsSuperAdmin = ["felipemenezes9272@gmail.com", "felipe_fmcosta@hotmail.com"].includes(emailStr) ? Boolean(is_super_admin) : false;
   const updateData: any = { 
     name, 
     email, 
@@ -1187,6 +1205,104 @@ app.post("/api/settings", async (req, res) => {
   } catch (err: any) {
     console.error("Settings Update Error:", err);
     res.status(400).json({ error: err.message });
+  }
+});
+
+// AI Business Insights proxy endpoint (keeps API keys completely server-side safely)
+app.post("/api/gemini/analyze", async (req, res) => {
+  const tenant_id = getTenantId(req);
+  const { 
+    type, 
+    totalSales, 
+    todayProfit, 
+    salesCount, 
+    ticketAverage, 
+    marginEstimate, 
+    lowStockCount, 
+    expiryAlerts, 
+    pendingBills, 
+    topProducts, 
+    salesTrend,
+    customersCount
+  } = req.body;
+
+  try {
+    // Attempt to retrieve a developer/tenant custom saved gemini API key from settings table first
+    let customApiKey: string | null = null;
+    try {
+      const { data: dbSettings } = await supabase
+        .from("settings")
+        .select("value")
+        .eq("key", "gemini_api_key")
+        .maybeSingle();
+      if (dbSettings && dbSettings.value && dbSettings.value !== "undefined" && dbSettings.value !== "TODO_KEYHERE") {
+        customApiKey = dbSettings.value;
+      }
+    } catch (e) {
+      console.warn("Could not retrieve custom Gemini API key from settings table. Falling back to environment variable.");
+    }
+
+    const apiKey = customApiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey === "undefined" || apiKey === "" || apiKey === "TODO_KEYHERE") {
+      return res.status(400).json({ 
+        error: "Chave de API não configurada. Por favor, vá em Configurações > Integração IA e insira uma chave válida do Google Gemini." 
+      });
+    }
+
+    // Initialize modern @google/genai client with proper safe telemetry headers
+    const aiClient = new GoogleGenAI({ 
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    // Build the Markdown instruction prompt dynamically on the server
+    let prompt = `Você é um Analista de Negócios Sênior. Analise os dados abaixo e forneça uma resposta estruturada em Markdown, com foco em rentabilidade e eficiência operacional.
+      
+DADOS DO SISTEMA:
+- Faturamento Total (Período): R$ ${(Number(totalSales) || 0).toFixed(2)}
+- Lucro de Hoje: R$ ${(Number(todayProfit) || 0).toFixed(2)}
+- Vendas Realizadas: ${Number(salesCount) || 0}
+- Ticket Médio: R$ ${(Number(ticketAverage) || 0).toFixed(2)}
+- Margem Média Estimada: ${(Number(marginEstimate) || 0).toFixed(1)}%
+- Produtos em Estoque Baixo: ${Number(lowStockCount) || 0}
+- Produtos Próximos ao Vencimento: ${Number(expiryAlerts) || 0}
+- Contas Pendentes: R$ ${(Number(pendingBills) || 0).toFixed(2)}
+- Top 5 Produtos (Volume e Margem): ${topProducts || "Não disponível"}
+- Tendência de Vendas (Últimos 7 dias): ${JSON.stringify(salesTrend || [])}
+- Clientes Cadastrados: ${Number(customersCount) || 0}
+      
+SOLICITAÇÃO: `;
+      
+    switch (type) {
+      case 'ticket_average':
+        prompt += `Forneça 3 estratégias de cross-selling e up-selling específicas para aumentar o ticket médio, baseando-se nos top produtos e suas margens.`;
+        break;
+      case 'stock_optimization':
+        prompt += `Analise os riscos de estoque baixo e vencimento. Sugira ações imediatas para reduzir perdas e otimizar o capital de giro, considerando o custo dos produtos.`;
+        break;
+      case 'customer_loyalty':
+        prompt += `Com base no volume de vendas e base de ${Number(customersCount) || 0} clientes, sugira um programa de fidelidade ou rádio de comunicação para aumentar a recorrência e o LTV.`;
+        break;
+      case 'promotions':
+        prompt += `Crie 3 ideias de combos ou promoções baseadas nos produtos em destaque e na necessidade de giro de estoque, garantindo que a margem de lucro permaneça saudável.`;
+        break;
+      default:
+        prompt += `Forneça um diagnostic geral da saúde financeira do negócio com 3 insights estratégicos acionáveis, cruzando dados de vendas, lucro e contas a pagar.`;
+    }
+
+    const result = await aiClient.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+    });
+
+    return res.json({ text: result.text });
+  } catch (err: any) {
+    console.error("Gemini Analysis Endpoint Error:", err);
+    return res.status(500).json({ error: "Erro na análise corporativa via IA", details: err.message });
   }
 });
 
